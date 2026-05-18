@@ -17,21 +17,20 @@
 package scripting
 
 import (
-	"github.com/czcorpus/klogproc-core/servicelog"
-
+	"github.com/czcorpus/klogproc-core/storage"
 	lua "github.com/yuin/gopher-lua"
 )
 
-func checkOutputRecord(L *lua.LState, pos int) servicelog.OutputRecord {
+func checkOutputRecord(L *lua.LState, pos int) storage.OutputRecord {
 	ud := L.CheckUserData(pos)
-	if v, ok := ud.Value.(servicelog.OutputRecord); ok {
+	if v, ok := ud.Value.(storage.OutputRecord); ok {
 		return v
 	}
-	L.ArgError(1, "servicelog.OutputRecord expected")
+	L.ArgError(1, "storage.OutputRecord expected")
 	return nil
 }
 
-func registerOutputRecord(env *lua.LState, outRecFact func() servicelog.OutputRecord) {
+func registerOutputRecord(env *lua.LState, outRecFact func() storage.OutputRecord) {
 	env.SetGlobal("new_out_rec", env.NewFunction(func(env *lua.LState) int {
 		ud := env.NewUserData()
 		ud.Value = outRecFact()
@@ -40,7 +39,7 @@ func registerOutputRecord(env *lua.LState, outRecFact func() servicelog.OutputRe
 	}))
 	env.SetGlobal("out_rec_deterministic_id", env.NewFunction(func(env *lua.LState) int {
 		ud := env.CheckUserData(1)
-		outRec, ok := ud.Value.(servicelog.OutputRecord)
+		outRec, ok := ud.Value.(storage.OutputRecord)
 		if !ok {
 			env.ArgError(1, "out_rec_deterministic_id is not an OutputRecord")
 			return 0

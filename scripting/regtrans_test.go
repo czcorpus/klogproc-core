@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/czcorpus/klogproc-core/logbuffer"
-	"github.com/czcorpus/klogproc-core/servicelog"
+	"github.com/czcorpus/klogproc-core/storage"
 
 	"github.com/stretchr/testify/assert"
 	lua "github.com/yuin/gopher-lua"
@@ -31,21 +31,21 @@ import (
 // Mock buffer implementation
 type mockBuffer struct{}
 
-func (mb *mockBuffer) AddRecord(rec servicelog.InputRecord)                    {}
+func (mb *mockBuffer) AddRecord(rec storage.InputRecord)                       {}
 func (mb *mockBuffer) ConfirmRecordCheck(rec logbuffer.Storable)               {}
 func (mb *mockBuffer) GetLastCheck(clusteringID string) time.Time              { return time.Now() }
 func (mb *mockBuffer) RemoveAnalyzedRecords(clusteringID string, dt time.Time) {}
 func (mb *mockBuffer) NumOfRecords(clusteringID string) int                    { return 0 }
 func (mb *mockBuffer) ClearOldRecords(maxAge time.Time) int                    { return 0 }
 func (mb *mockBuffer) TotalNumOfRecordsSince(dt time.Time) int                 { return 0 }
-func (mb *mockBuffer) GetRecords(clusteringID string, from time.Time) []servicelog.InputRecord {
+func (mb *mockBuffer) GetRecords(clusteringID string, from time.Time) []storage.InputRecord {
 	return nil
 }
-func (mb *mockBuffer) ForEach(clusteringID string, fn func(item servicelog.InputRecord)) {}
-func (mb *mockBuffer) TotalForEach(fn func(item servicelog.InputRecord))                 {}
-func (mb *mockBuffer) SetStateData(stateData logbuffer.SerializableState)                {}
-func (mb *mockBuffer) GetStateData(dtNow time.Time) logbuffer.SerializableState          { return nil }
-func (mb *mockBuffer) EmptyStateData() logbuffer.SerializableState                       { return nil }
+func (mb *mockBuffer) ForEach(clusteringID string, fn func(item storage.InputRecord)) {}
+func (mb *mockBuffer) TotalForEach(fn func(item storage.InputRecord))                 {}
+func (mb *mockBuffer) SetStateData(stateData logbuffer.SerializableState)             {}
+func (mb *mockBuffer) GetStateData(dtNow time.Time) logbuffer.SerializableState       { return nil }
+func (mb *mockBuffer) EmptyStateData() logbuffer.SerializableState                    { return nil }
 
 func setupLuaState() (*lua.LState, *ltrans) {
 	L := lua.NewState()
@@ -94,7 +94,7 @@ func TestTransformDefault(t *testing.T) {
 	result := L.Get(-1)
 	assert.Equal(t, lua.LTUserData, result.Type())
 
-	outRec, ok := result.(*lua.LUserData).Value.(servicelog.OutputRecord)
+	outRec, ok := result.(*lua.LUserData).Value.(storage.OutputRecord)
 	assert.True(t, ok)
 	assert.Equal(t, "test-123", outRec.GetID())
 }

@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/czcorpus/klogproc-core/logbuffer"
-	"github.com/czcorpus/klogproc-core/servicelog"
+	"github.com/czcorpus/klogproc-core/storage"
 
 	lua "github.com/yuin/gopher-lua"
 )
@@ -135,15 +135,15 @@ func (lt *ltrans) AppType() string {
 func (lt *ltrans) HistoryLookupItems() int { return 0 }
 
 func (lt *ltrans) Preprocess(
-	rec servicelog.InputRecord,
-	prevRecs servicelog.ServiceLogBuffer,
-) ([]servicelog.InputRecord, error) {
-	return []servicelog.InputRecord{rec}, nil
+	rec storage.InputRecord,
+	prevRecs storage.ServiceLogBuffer,
+) ([]storage.InputRecord, error) {
+	return []storage.InputRecord{rec}, nil
 }
 
 func (lt *ltrans) Transform(
-	logRec servicelog.InputRecord,
-) (servicelog.OutputRecord, error) {
+	logRec storage.InputRecord,
+) (storage.OutputRecord, error) {
 	tLogRec, ok := logRec.(*dummyInputRec)
 	if !ok {
 		panic("invalid type")

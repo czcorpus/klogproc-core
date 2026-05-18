@@ -19,16 +19,16 @@ package save
 import (
 	"fmt"
 
-	"github.com/czcorpus/klogproc-core/servicelog"
+	"github.com/czcorpus/klogproc-core/storage"
 
 	"github.com/rs/zerolog/log"
 )
 
 // RunWriteConsumer runs a dummy (null) write consumer
-func RunWriteConsumer(incomingData <-chan *servicelog.BoundOutputRecord, printOut bool) <-chan ConfirmMsg {
+func RunWriteConsumer(incomingData <-chan *storage.BoundOutputRecord, printOut bool) <-chan ConfirmMsg {
 	confirmChan := make(chan ConfirmMsg)
 	go func() {
-		var chunkPosition *servicelog.LogRange
+		var chunkPosition *storage.LogRange
 		for item := range incomingData {
 			var jsonError error
 			if chunkPosition == nil {

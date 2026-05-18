@@ -20,18 +20,17 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/czcorpus/klogproc-core/servicelog"
-
+	"github.com/czcorpus/klogproc-core/storage"
 	lua "github.com/yuin/gopher-lua"
 )
 
-func registerStaticTransformer[T servicelog.LogItemTransformer](
+func registerStaticTransformer[T storage.LogItemTransformer](
 	L *lua.LState, transformer T,
 ) error {
 
 	L.SetGlobal("transform_default", L.NewFunction(func(L *lua.LState) int {
 		lrec := L.CheckUserData(1)
-		tLrec, ok := lrec.Value.(servicelog.InputRecord)
+		tLrec, ok := lrec.Value.(storage.InputRecord)
 		if !ok {
 			L.ArgError(1, "expected InputRecord")
 		}
@@ -47,13 +46,13 @@ func registerStaticTransformer[T servicelog.LogItemTransformer](
 
 	L.SetGlobal("preprocess_default", L.NewFunction(func(L *lua.LState) int {
 		lrec := L.CheckUserData(1)
-		tLrec, ok := lrec.Value.(servicelog.InputRecord)
+		tLrec, ok := lrec.Value.(storage.InputRecord)
 		if !ok {
 			L.ArgError(1, "expected InputRecord")
 			return 1
 		}
 		logBuffer := L.CheckUserData(2)
-		tLogBuffer, ok := logBuffer.Value.(servicelog.ServiceLogBuffer)
+		tLogBuffer, ok := logBuffer.Value.(storage.ServiceLogBuffer)
 		if !ok {
 			L.ArgError(2, "expected ServiceLogBuffer")
 			return 1

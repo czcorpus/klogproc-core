@@ -19,13 +19,12 @@ package clustering
 import (
 	"time"
 
-	"github.com/czcorpus/klogproc-core/servicelog"
-
+	"github.com/czcorpus/klogproc-core/storage"
 	"github.com/kelindar/dbscan"
 )
 
 type ClusterableRecord struct {
-	rec servicelog.InputRecord
+	rec storage.InputRecord
 }
 
 func (cr ClusterableRecord) GetTime() time.Time {
@@ -40,7 +39,7 @@ func (cr ClusterableRecord) Name() string {
 	return cr.rec.GetTime().Format(time.RFC3339Nano)
 }
 
-func wrapInputRecords(input []servicelog.InputRecord) []dbscan.Point {
+func wrapInputRecords(input []storage.InputRecord) []dbscan.Point {
 	ans := make([]dbscan.Point, len(input))
 	for i, v := range input {
 		ans[i] = ClusterableRecord{rec: v}
@@ -49,11 +48,11 @@ func wrapInputRecords(input []servicelog.InputRecord) []dbscan.Point {
 }
 
 func Analyze(
-	minDensity int, epsilon float64, input []servicelog.InputRecord,
-) []servicelog.InputRecord {
+	minDensity int, epsilon float64, input []storage.InputRecord,
+) []storage.InputRecord {
 	input2 := wrapInputRecords(input)
 	clusters := dbscan.Cluster(minDensity, epsilon, input2...)
-	ans := make([]servicelog.InputRecord, len(clusters))
+	ans := make([]storage.InputRecord, len(clusters))
 	for i, cl := range clusters {
 		rec := (cl[0].(ClusterableRecord)).rec
 		rec.SetCluster(len(cl))

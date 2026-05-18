@@ -1,5 +1,5 @@
-// Copyright 2023 Tomas Machalek <tomas.machalek@gmail.com>
-// Copyright 2023 Institute of the Czech National Corpus,
+// Copyright 2024 Tomas Machalek <tomas.machalek@gmail.com>
+// Copyright 2024 Institute of the Czech National Corpus,
 //                Faculty of Arts, Charles University
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,23 +14,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package analysis
+package storage
 
-import "github.com/czcorpus/klogproc-core/storage"
+import (
+	"testing"
 
-type NullAnalyzer[T AnalyzableRecord] struct {
-	appType string
+	"github.com/stretchr/testify/assert"
+)
+
+func TestErrorRecordString(t *testing.T) {
+	var err *ErrorRecord
+	assert.Equal(t, "", err.String())
+
+	var err2 ErrorRecord
+	assert.Equal(t, "", err2.String())
 }
 
-func (analyzer *NullAnalyzer[T]) Preprocess(
-	rec storage.InputRecord,
-	prevRecs BufferedRecords,
-) []storage.InputRecord {
-	return []storage.InputRecord{rec}
-}
+func TestErrorRecordAsPointer(t *testing.T) {
+	var err ErrorRecord
+	assert.Nil(t, err.AsPointer())
 
-func NewNullAnalyzer[T AnalyzableRecord](appType string) *NullAnalyzer[T] {
-	return &NullAnalyzer[T]{
-		appType: appType,
-	}
+	err.Name = "A bad one"
+	assert.NotNil(t, err.AsPointer())
+
 }

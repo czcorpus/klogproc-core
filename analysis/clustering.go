@@ -22,7 +22,7 @@ import (
 
 	"github.com/czcorpus/klogproc-core/clustering"
 	"github.com/czcorpus/klogproc-core/logbuffer"
-	"github.com/czcorpus/klogproc-core/servicelog"
+	"github.com/czcorpus/klogproc-core/storage"
 
 	"github.com/rs/zerolog/log"
 )
@@ -60,9 +60,9 @@ type ClusteringAnalyzer[T AnalyzableRecord] struct {
 }
 
 func (analyzer *ClusteringAnalyzer[T]) Preprocess(
-	rec servicelog.InputRecord,
+	rec storage.InputRecord,
 	prevRecs BufferedRecords,
-) []servicelog.InputRecord {
+) []storage.InputRecord {
 
 	currTime := rec.GetTime()
 	if analyzer.realtimeClock {
@@ -79,8 +79,8 @@ func (analyzer *ClusteringAnalyzer[T]) Preprocess(
 	clusterLastCheck := prevRecs.GetLastCheck(clusteringID)
 	ci := time.Duration(analyzer.conf.AnalysisIntervalSecs) * time.Second
 	if rec.GetTime().Sub(clusterLastCheck) > ci {
-		items := make([]servicelog.InputRecord, 0, prevRecs.NumOfRecords(clusteringID))
-		prevRecs.ForEach(clusteringID, func(item servicelog.InputRecord) {
+		items := make([]storage.InputRecord, 0, prevRecs.NumOfRecords(clusteringID))
+		prevRecs.ForEach(clusteringID, func(item storage.InputRecord) {
 			items = append(items, item)
 		})
 		if len(items) > 0 {
@@ -105,7 +105,7 @@ func (analyzer *ClusteringAnalyzer[T]) Preprocess(
 			}
 		}
 	}
-	return []servicelog.InputRecord{rec}
+	return []storage.InputRecord{rec}
 }
 
 func NewAnalyzer[T AnalyzableRecord](

@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/czcorpus/klogproc-core/logbuffer"
-	"github.com/czcorpus/klogproc-core/servicelog"
+	"github.com/czcorpus/klogproc-core/storage"
 
 	"github.com/czcorpus/cnc-gokit/collections"
 	"github.com/czcorpus/cnc-gokit/datetime"
@@ -107,7 +107,7 @@ func (state *BotAnalysisState) Report() map[string]any {
 }
 
 // BotAnalyzer is used in the "preprocess" phase of
-// the servicelog.process. Using log records buffer,
+// the storage.process. Using log records buffer,
 // it searches for suspicious traffic and IP addresses.
 //
 // Basically, it looks for
@@ -262,7 +262,7 @@ func (analyzer *BotAnalyzer[T]) testAndReportSuspicRequestIPs(
 ) collections.BinTree[*ReqCalcItem] {
 	lastPeriodCounter := make(map[string]*ReqCalcItem)
 	var avgRequests float64
-	prevRecs.TotalForEach(func(item servicelog.InputRecord) {
+	prevRecs.TotalForEach(func(item storage.InputRecord) {
 		if analyzer.isIgnoredIP(item.GetClientIP()) || !item.GetTime().After(state.LastCheck) {
 			return
 		}
@@ -353,9 +353,9 @@ func (analyzer *BotAnalyzer[T]) testAndReportSuspicRequestIPs(
 }
 
 func (analyzer *BotAnalyzer[T]) Preprocess(
-	rec servicelog.InputRecord,
+	rec storage.InputRecord,
 	prevRecs BufferedRecords,
-) []servicelog.InputRecord {
+) []storage.InputRecord {
 
 	currTime := rec.GetTime()
 	if analyzer.realtimeClock {
@@ -363,7 +363,7 @@ func (analyzer *BotAnalyzer[T]) Preprocess(
 	}
 
 	tRec, ok := rec.(T)
-	ans := []servicelog.InputRecord{rec}
+	ans := []storage.InputRecord{rec}
 	if !ok {
 		log.Warn().
 			Str("appType", analyzer.appType).

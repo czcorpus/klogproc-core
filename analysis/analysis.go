@@ -18,13 +18,13 @@ package analysis
 
 import (
 	"github.com/czcorpus/klogproc-core/logbuffer"
-	"github.com/czcorpus/klogproc-core/servicelog"
+	"github.com/czcorpus/klogproc-core/storage"
 
 	"github.com/czcorpus/cnc-gokit/collections"
 	"github.com/czcorpus/cnc-gokit/maths"
 )
 
-type BufferedRecords = logbuffer.AbstractRecentRecords[servicelog.InputRecord, logbuffer.SerializableState]
+type BufferedRecords = logbuffer.AbstractRecentRecords[storage.InputRecord, logbuffer.SerializableState]
 
 type sitemsWrapper struct {
 	data collections.BinTree[*ReqCalcItem]
@@ -51,7 +51,7 @@ func (rci *ReqCalcItem) SuspicRatio() float64 {
 }
 
 type AnalyzableRecord interface {
-	servicelog.InputRecord
+	storage.InputRecord
 	ShouldBeAnalyzed() bool
 }
 

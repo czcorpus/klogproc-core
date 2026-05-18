@@ -21,8 +21,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/czcorpus/klogproc-core/servicelog"
-
+	"github.com/czcorpus/klogproc-core/storage"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -78,7 +77,7 @@ func importField(L *lua.LState, field reflect.Value) lua.LValue {
 // getIRecProp
 // TODO: this is not very effective for repeated calls on the same
 // input report as each time, it creates a LFunction instance to be called
-func getIRecProp(L *lua.LState, inputRec servicelog.InputRecord, name string) lua.LValue {
+func getIRecProp(L *lua.LState, inputRec storage.InputRecord, name string) lua.LValue {
 	val := reflect.ValueOf(inputRec).Elem()
 	if field := val.FieldByName(name); field.IsValid() {
 		return importField(L, field)
@@ -128,7 +127,7 @@ func getIRecProp(L *lua.LState, inputRec servicelog.InputRecord, name string) lu
 
 func get(L *lua.LState) int {
 	irec := L.CheckUserData(1)
-	tIrec, ok := irec.Value.(servicelog.InputRecord)
+	tIrec, ok := irec.Value.(storage.InputRecord)
 	if !ok {
 		L.ArgError(1, "expecting InputRecord")
 	}
@@ -138,7 +137,7 @@ func get(L *lua.LState) int {
 	return 1
 }
 
-func importInputRecord(L *lua.LState, rec servicelog.InputRecord) lua.LValue {
+func importInputRecord(L *lua.LState, rec storage.InputRecord) lua.LValue {
 	d := L.NewUserData()
 	d.Value = rec
 	L.SetMetatable(d, L.GetGlobal(inputRecName))

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/czcorpus/klogproc-core/servicelog"
+	"github.com/czcorpus/klogproc-core/storage"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -35,7 +35,7 @@ func prepareScript(env *lua.LState, srcPath string) error {
 	return nil
 }
 
-func CreateCustomTransformer(sourceCode string, transformer servicelog.LogItemTransformer, beforeRun func(env *lua.LState)) (*Transformer, error) {
+func CreateCustomTransformer(sourceCode string, transformer storage.LogItemTransformer, beforeRun func(env *lua.LState)) (*Transformer, error) {
 	L := lua.NewState()
 	beforeRun(L)
 	if err := L.DoString(sourceCode); err != nil {
@@ -50,7 +50,7 @@ func testIRecProp(L *lua.LState) int {
 	name := L.CheckString(2)
 
 	switch inputRec := ud.Value.(type) {
-	case servicelog.InputRecord, servicelog.OutputRecord:
+	case storage.InputRecord, storage.OutputRecord:
 		val := reflect.ValueOf(inputRec).Elem()
 		field := val.FieldByName(name)
 		if field.IsValid() { // AFAIK we cannot use type conversion here
@@ -113,10 +113,10 @@ func setupLogging(L *lua.LState) {
 }
 
 func CreateEnvironment(
-	logConf servicelog.LogProcConf,
+	logConf storage.LogProcConf,
 	anonymousUsers []int,
-	defaultTransformer servicelog.LogItemTransformer,
-	outRecFactory func() servicelog.OutputRecord,
+	defaultTransformer storage.LogItemTransformer,
+	outRecFactory func() storage.OutputRecord,
 ) (*lua.LState, error) {
 	L := lua.NewState()
 	registerInputRecord(L)

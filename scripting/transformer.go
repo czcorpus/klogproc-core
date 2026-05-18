@@ -20,8 +20,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/czcorpus/klogproc-core/servicelog"
-
+	"github.com/czcorpus/klogproc-core/storage"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -29,7 +28,7 @@ import (
 
 type Transformer struct {
 	L                 *lua.LState
-	staticTransformer servicelog.LogItemTransformer
+	staticTransformer storage.LogItemTransformer
 	anonymousUsers    []int
 }
 
@@ -46,9 +45,9 @@ func (t *Transformer) AppType() string {
 }
 
 func (t *Transformer) Preprocess(
-	rec servicelog.InputRecord,
-	prevRecs servicelog.ServiceLogBuffer,
-) ([]servicelog.InputRecord, error) {
+	rec storage.InputRecord,
+	prevRecs storage.ServiceLogBuffer,
+) ([]storage.InputRecord, error) {
 	if t.L == nil {
 		return t.staticTransformer.Preprocess(rec, prevRecs)
 	}
@@ -81,7 +80,7 @@ func (t *Transformer) Preprocess(
 			t.AppType(), reflect.TypeOf(ret))
 	}
 	t.L.Pop(1)
-	unwrapped, err := LuaTableToSliceOfUserData[servicelog.InputRecord](tRet)
+	unwrapped, err := LuaTableToSliceOfUserData[storage.InputRecord](tRet)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to preprocess record of type %s using a Lua script: %s",
@@ -90,7 +89,7 @@ func (t *Transformer) Preprocess(
 	return unwrapped, nil
 }
 
-func (t *Transformer) Transform(logRec servicelog.InputRecord) (servicelog.OutputRecord, error) {
+func (t *Transformer) Transform(logRec storage.InputRecord) (storage.OutputRecord, error) {
 	if t.L == nil {
 		return t.staticTransformer.Transform(logRec)
 	}
@@ -124,7 +123,7 @@ func (t *Transformer) Transform(logRec servicelog.InputRecord) (servicelog.Outpu
 			t.AppType())
 	}
 	t.L.Pop(1)
-	unwrapped, ok := tRet.Value.(servicelog.OutputRecord)
+	unwrapped, ok := tRet.Value.(storage.OutputRecord)
 	if !ok {
 		return nil, fmt.Errorf(
 			"failed to transform record of type %s using a Lua script: invalid type of wrapped value",
@@ -137,6 +136,6 @@ func (t *Transformer) Close() {
 	t.L.Close()
 }
 
-func NewTransformer(env *lua.LState, staticTransformer servicelog.LogItemTransformer) *Transformer {
+func NewTransformer(env *lua.LState, staticTransformer storage.LogItemTransformer) *Transformer {
 	return &Transformer{L: env, staticTransformer: staticTransformer}
 }

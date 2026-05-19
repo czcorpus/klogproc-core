@@ -95,7 +95,7 @@ func (cnkr *OutputRecord) LSetProperty(name string, value lua.LValue) error {
 	return scripting.ErrScriptingNotSupported
 }
 
-func isEntryQuery(action string) bool {
+func IsEntryQuery(action string) bool {
 	ea := []string{"first", "wordlist", "wsketch", "thes", "wsdiff", "query_submit"}
 	for _, item := range ea {
 		if item == action {

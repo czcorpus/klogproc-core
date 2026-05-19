@@ -42,7 +42,7 @@ type OutputRecord struct {
 	IsAI      bool                  `json:"isAI"`
 	ProcTime  float64               `json:"procTime"`
 	Error     *storage.ErrorRecord  `json:"error,omitempty"`
-	GeoIP     storage.GeoDataRecord `json:"geoip,omitempty"`
+	GeoIP     storage.GeoDataRecord `json:"geoip,omitzero"`
 	Action    string                `json:"action,omitempty"`
 	CorpusID  string                `json:"corpus,omitempty"`
 }

@@ -30,9 +30,9 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-// isEntryQuery returns true if the action is one of
+// IsEntryQuery returns true if the action is one of
 // those we consider "queries".
-func isEntryQuery(action string) bool {
+func IsEntryQuery(action string) bool {
 	ea := []string{"first", "wordlist", "wsketch", "thes", "wsdiff"}
 	for _, item := range ea {
 		if item == action {
@@ -174,8 +174,8 @@ func (r *OutputRecord) GenerateDeterministicID() string {
 	return hex.EncodeToString(sum[:])
 }
 
-// importCorpname imports corpname information out of URL-raw information.
-func importCorpname(rawCorpname string) (string, bool) {
+// ImportCorpname imports corpname information out of URL-raw information.
+func ImportCorpname(rawCorpname string) (string, bool) {
 	items := strings.Split(rawCorpname, "/")
 	if len(items) > 1 && items[0] == "omezeni" {
 		return items[1], true

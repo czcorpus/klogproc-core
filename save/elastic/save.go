@@ -100,7 +100,7 @@ func RunWriteConsumer(ctx context.Context, appType string, conf *ConnectionConf,
 			var rec *storage.BoundOutputRecord
 
 			defer func() {
-				if i > 0 && ctx.Err() == nil {
+				if i > 0 && ctx.Err() == nil && chunkPosition != nil && rec != nil {
 					data[i] = []byte("\n")
 					esErr = BulkWriteRequest(ctx, data[:i+1], appType, conf)
 					chunkPosition.Written = esErr == nil

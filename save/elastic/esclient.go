@@ -18,6 +18,7 @@ package elastic
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -188,10 +189,10 @@ func (c ESClient) String() string {
 
 // Do sends a general request to ElasticSearch server where
 // 'query' is expected to be a JSON-encoded argument object
-func (c *ESClient) DoBulkRequest(method string, path string, query []byte) ([]byte, error) {
+func (c *ESClient) DoBulkRequest(ctx context.Context, method string, path string, query []byte) ([]byte, error) {
 	body := bytes.NewBuffer(query)
 	client := http.Client{Timeout: time.Second * time.Duration(c.reqTimeoutSecs)}
-	req, err := http.NewRequest(method, c.server+path, body)
+	req, err := http.NewRequestWithContext(ctx, method, c.server+path, body)
 	if err != nil {
 		return []byte{}, err
 	}
@@ -221,10 +222,10 @@ func (c *ESClient) DoBulkRequest(method string, path string, query []byte) ([]by
 	return respBody, nil
 }
 
-func (c *ESClient) DoRequest(method string, path string, query []byte) ([]byte, error) {
+func (c *ESClient) DoRequest(ctx context.Context, method string, path string, query []byte) ([]byte, error) {
 	body := bytes.NewBuffer(query)
 	client := http.Client{Timeout: time.Second * time.Duration(c.reqTimeoutSecs)}
-	req, err := http.NewRequest(method, c.server+path, body)
+	req, err := http.NewRequestWithContext(ctx, method, c.server+path, body)
 	if err != nil {
 		return []byte{}, err
 	}
@@ -245,12 +246,12 @@ func (c *ESClient) DoRequest(method string, path string, query []byte) ([]byte, 
 }
 
 // search is a low level search function
-func (c *ESClient) search(query []byte, scroll string) (Result, error) {
+func (c *ESClient) search(ctx context.Context, query []byte, scroll string) (Result, error) {
 	path := "/" + c.index + "/_search"
 	if scroll != "" {
 		path += "?scroll=" + scroll
 	}
-	resp, err := c.DoRequest("GET", path, query)
+	resp, err := c.DoRequest(ctx, "GET", path, query)
 	if err != nil {
 		return NewEmptyResult(), err
 	}
@@ -263,9 +264,9 @@ func (c *ESClient) search(query []byte, scroll string) (Result, error) {
 }
 
 // count is a low level count function
-func (c *ESClient) count(query []byte) (int, error) {
+func (c *ESClient) count(ctx context.Context, query []byte) (int, error) {
 	path := "/" + c.index + "/_count"
-	resp, err := c.DoRequest("GET", path, query)
+	resp, err := c.DoRequest(ctx, "GET", path, query)
 	if err != nil {
 		return 0, err
 	}
@@ -279,12 +280,12 @@ func (c *ESClient) count(query []byte) (int, error) {
 
 // FetchScroll fetch additional data from an existing result
 // using a scrollId.
-func (c *ESClient) FetchScroll(scrollID string, ttl string) (Result, error) {
+func (c *ESClient) FetchScroll(ctx context.Context, scrollID string, ttl string) (Result, error) {
 	jsonBody, err := json.Marshal(scrollObj{Scroll: ttl, ScrollID: scrollID})
 	if err != nil {
 		return NewEmptyResult(), err
 	}
-	resp, err := c.DoRequest("POST", "/_search/scroll", jsonBody)
+	resp, err := c.DoRequest(ctx, "POST", "/_search/scroll", jsonBody)
 	if err != nil {
 		return NewEmptyResult(), err
 	}
@@ -352,16 +353,22 @@ func (df *DocFilter) Overview() string {
 // Result fetching uses ElasticSearch scroll mechanism which requires
 // providing TTL value to specify how long the result scroll should be
 // available.
-func (c *ESClient) SearchRecords(appType string, filter DocFilter, ttl string, chunkSize int) (Result, error) {
+func (c *ESClient) SearchRecords(
+	ctx context.Context,
+	appType string,
+	filter DocFilter,
+	ttl string,
+	chunkSize int,
+) (Result, error) {
 	encQuery, err := CreateClientSrchQuery(appType, filter, chunkSize)
 	if err == nil {
-		return c.search(encQuery, ttl)
+		return c.search(ctx, encQuery, ttl)
 	}
 	return NewEmptyResult(), err
 }
 
 // CountRecords counts records matching provided filter.
-func (c *ESClient) CountRecords(appType string, filters []DocFilter) (int, error) {
+func (c *ESClient) CountRecords(ctx context.Context, appType string, filters []DocFilter) (int, error) {
 	count := 0
 	for _, filter := range filters {
 		if filter.Disabled {
@@ -371,7 +378,7 @@ func (c *ESClient) CountRecords(appType string, filters []DocFilter) (int, error
 		if err != nil {
 			return count, err
 		}
-		c, err := c.count(encQuery)
+		c, err := c.count(ctx, encQuery)
 		if err != nil {
 			return count, err
 		}

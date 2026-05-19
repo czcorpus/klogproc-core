@@ -18,6 +18,7 @@ package elastic
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 
 	"github.com/rs/zerolog/log"
@@ -92,7 +93,7 @@ type UpdResponse struct {
 	Shards  interface{} `json:"_shards"` // we don't care much about this (yet)
 }
 
-func (c *ESClient) bulkUpdateUpdRecordScroll(index string, hits Hits, rawOp []byte) (int, error) {
+func (c *ESClient) bulkUpdateUpdRecordScroll(ctx context.Context, index string, hits Hits, rawOp []byte) (int, error) {
 	jsonLines := make([][]byte, len(hits.Hits)*2+1) // one for final 'new line'
 	stopIdx := 0
 	for _, item := range hits.Hits {
@@ -108,7 +109,7 @@ func (c *ESClient) bulkUpdateUpdRecordScroll(index string, hits Hits, rawOp []by
 	}
 	jsonLines[stopIdx] = make([]byte, 0)
 	stopIdx++
-	_, err := c.DoBulkRequest("POST", "/_bulk", bytes.Join(jsonLines[:stopIdx], []byte("\n")))
+	_, err := c.DoBulkRequest(ctx, "POST", "/_bulk", bytes.Join(jsonLines[:stopIdx], []byte("\n")))
 	if err != nil {
 		return 0, err
 	}
@@ -122,6 +123,7 @@ func createDocBulkUpdateMetaRecord(index string, objType string, id string) ([]b
 }
 
 func (c *ESClient) manualBulkRecordOp(
+	ctx context.Context,
 	index string,
 	appType string,
 	filters DocFilter,
@@ -131,7 +133,7 @@ func (c *ESClient) manualBulkRecordOp(
 ) (int, error) {
 	totalUpdated := 0
 	if !filters.Disabled {
-		items, err := c.SearchRecords(appType, filters, scrollTTL, srchChunkSize)
+		items, err := c.SearchRecords(ctx, appType, filters, scrollTTL, srchChunkSize)
 		if err != nil {
 			return totalUpdated, err
 		}
@@ -142,7 +144,7 @@ func (c *ESClient) manualBulkRecordOp(
 			return 0, nil
 
 		} else if len(items.Hits.Hits) > 0 {
-			ans, bulkErr := c.bulkUpdateUpdRecordScroll(index, items.Hits, rawOp)
+			ans, bulkErr := c.bulkUpdateUpdRecordScroll(ctx, index, items.Hits, rawOp)
 			totalUpdated += ans
 			if bulkErr != nil {
 				return totalUpdated, bulkErr
@@ -150,7 +152,7 @@ func (c *ESClient) manualBulkRecordOp(
 		}
 		if items.ScrollID != "" {
 			for len(items.Hits.Hits) > 0 {
-				items, err = c.FetchScroll(items.ScrollID, scrollTTL)
+				items, err = c.FetchScroll(ctx, items.ScrollID, scrollTTL)
 				if err != nil {
 					return totalUpdated, err
 				}
@@ -158,7 +160,7 @@ func (c *ESClient) manualBulkRecordOp(
 					items.Hits = items.Hits.Sampled(filters.WithProbability)
 				}
 				if len(items.Hits.Hits) > 0 {
-					ans, bulkErr := c.bulkUpdateUpdRecordScroll(index, items.Hits, rawOp)
+					ans, bulkErr := c.bulkUpdateUpdRecordScroll(ctx, index, items.Hits, rawOp)
 					totalUpdated += ans
 					if bulkErr != nil {
 						return totalUpdated, err
@@ -172,6 +174,7 @@ func (c *ESClient) manualBulkRecordOp(
 
 // ManualBulkRecordUpdate updates matching records with provided object
 func (c *ESClient) ManualBulkRecordUpdate(
+	ctx context.Context,
 	index string,
 	appType string,
 	filters DocFilter,
@@ -184,11 +187,12 @@ func (c *ESClient) ManualBulkRecordUpdate(
 	if err != nil {
 		log.Fatal().Msgf("Failed to generate bulk update JSON (values): %s", err)
 	}
-	return c.manualBulkRecordOp(index, appType, filters, jsonData, scrollTTL, srchChunkSize)
+	return c.manualBulkRecordOp(ctx, index, appType, filters, jsonData, scrollTTL, srchChunkSize)
 }
 
 // ManualBulkRecordKeyRemove removes a specified key from matching records.
 func (c *ESClient) ManualBulkRecordKeyRemove(
+	ctx context.Context,
 	index string,
 	appType string,
 	filters DocFilter,
@@ -201,5 +205,5 @@ func (c *ESClient) ManualBulkRecordKeyRemove(
 	if err != nil {
 		log.Fatal().Msgf("Failed to generate bulk update JSON (values): %s", err)
 	}
-	return c.manualBulkRecordOp(index, appType, filters, jsonData, scrollTTL, srchChunkSize)
+	return c.manualBulkRecordOp(ctx, index, appType, filters, jsonData, scrollTTL, srchChunkSize)
 }

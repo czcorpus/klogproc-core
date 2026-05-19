@@ -17,6 +17,7 @@
 package elastic
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -80,14 +81,14 @@ type acceptedResp struct {
 	Accepted bool `json:"accepted"`
 }
 
-func (c *ESClient) createSnapshot(repository, name string, args CreateSnapshotArgs) (string, error) {
+func (c *ESClient) createSnapshot(ctx context.Context, repository, name string, args CreateSnapshotArgs) (string, error) {
 	url := fmt.Sprintf("/_snapshot/%s/%s", repository, name)
 	query, err := json.Marshal(args)
 	if err != nil {
 		return "", fmt.Errorf("failed to create snapshot: %w", err)
 	}
 	log.Debug().Any("snapshotArgs", args).Msg("Creating snapshot")
-	resp, err := c.DoRequest("PUT", url, query)
+	resp, err := c.DoRequest(ctx, "PUT", url, query)
 	if err != nil {
 		return "", err
 	}
@@ -101,9 +102,9 @@ func (c *ESClient) createSnapshot(repository, name string, args CreateSnapshotAr
 	return "", fmt.Errorf("snapshot %s not accepted", name)
 }
 
-func (c *ESClient) testRepoExists(repository, rootFSPath string) (bool, error) {
+func (c *ESClient) testRepoExists(ctx context.Context, repository, rootFSPath string) (bool, error) {
 	url := fmt.Sprintf("/_snapshot/%s", repository)
-	_, err := c.DoRequest("GET", url, []byte{})
+	_, err := c.DoRequest(ctx, "GET", url, []byte{})
 	if err != nil {
 		var tErr *ESClientError
 		if errors.As(err, &tErr) {
@@ -116,8 +117,8 @@ func (c *ESClient) testRepoExists(repository, rootFSPath string) (bool, error) {
 	return true, nil
 }
 
-func (c *ESClient) createSnapshotRepo(repository, rootFSPath string) error {
-	exists, err := c.testRepoExists(repository, rootFSPath)
+func (c *ESClient) createSnapshotRepo(ctx context.Context, repository, rootFSPath string) error {
+	exists, err := c.testRepoExists(ctx, repository, rootFSPath)
 	if err != nil {
 		return fmt.Errorf("failed to creeate snapshot repository: %w", err)
 	}
@@ -139,15 +140,15 @@ func (c *ESClient) createSnapshotRepo(repository, rootFSPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create snapshot repository: %w", err)
 	}
-	if _, err := c.DoRequest("PUT", url, body); err != nil {
+	if _, err := c.DoRequest(ctx, "PUT", url, body); err != nil {
 		return fmt.Errorf("failed to create snapshot repository: %w", err)
 	}
 	return nil
 }
 
 // Create snapshot
-func (c *ESClient) CreateSnapshot(conf SnapshotConf, appType, name, reason string) (string, error) {
-	if err := c.createSnapshotRepo(appType, conf.RootFSPath); err != nil {
+func (c *ESClient) CreateSnapshot(ctx context.Context, conf SnapshotConf, appType, name, reason string) (string, error) {
+	if err := c.createSnapshotRepo(ctx, appType, conf.RootFSPath); err != nil {
 		return "", fmt.Errorf("failed to create snapshot: %w", err)
 	}
 	if name == "" {
@@ -157,6 +158,7 @@ func (c *ESClient) CreateSnapshot(conf SnapshotConf, appType, name, reason strin
 		reason = "Unspecified"
 	}
 	return c.createSnapshot(
+		ctx,
 		appType,
 		name,
 		CreateSnapshotArgs{
@@ -193,9 +195,9 @@ type ListSnapshotsResponse struct {
 	} `json:"snapshots"`
 }
 
-func (c *ESClient) ListSnapshots(conf SnapshotConf, appType string) (*ListSnapshotsResponse, error) {
+func (c *ESClient) ListSnapshots(ctx context.Context, conf SnapshotConf, appType string) (*ListSnapshotsResponse, error) {
 	path := "/_snapshot/" + appType + "/_all"
-	resp, err := c.DoRequest("GET", path, nil)
+	resp, err := c.DoRequest(ctx, "GET", path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -207,9 +209,9 @@ func (c *ESClient) ListSnapshots(conf SnapshotConf, appType string) (*ListSnapsh
 	return &snapshotList, nil
 }
 
-func (c *ESClient) RemoveSnapshot(conf SnapshotConf, appType, name string) error {
+func (c *ESClient) RemoveSnapshot(ctx context.Context, conf SnapshotConf, appType, name string) error {
 	path := "/_snapshot/" + appType + "/" + name
-	_, err := c.DoRequest("DELETE", path, nil)
+	_, err := c.DoRequest(ctx, "DELETE", path, nil)
 	if err != nil {
 		return fmt.Errorf("failed to remove snapshot %s: %w", name, err)
 	}
@@ -222,7 +224,7 @@ type RestoreSnapshotArgs struct {
 	IncludeGlobalState bool   `json:"include_global_state"`
 }
 
-func (c *ESClient) RestoreSnapshot(conf SnapshotConf, appType, name string) error {
+func (c *ESClient) RestoreSnapshot(ctx context.Context, conf SnapshotConf, appType, name string) error {
 	path := "/_snapshot/" + appType + "/" + name + "/_restore"
 	snapshotArgs := RestoreSnapshotArgs{
 		Indices:            c.index,
@@ -233,7 +235,7 @@ func (c *ESClient) RestoreSnapshot(conf SnapshotConf, appType, name string) erro
 	if err != nil {
 		return fmt.Errorf("failed to marshal snapshot args: %w", err)
 	}
-	_, err = c.DoRequest("POST", path, query)
+	_, err = c.DoRequest(ctx, "POST", path, query)
 	if err != nil {
 		return fmt.Errorf("failed to restore snapshot %s: %w", name, err)
 	}

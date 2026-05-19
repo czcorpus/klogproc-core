@@ -19,6 +19,7 @@ package elastic
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -81,7 +82,7 @@ func createDocBulkRemoveMetaRecord(index string, objType string, id string) ([]b
 	return json.Marshal(obj)
 }
 
-func (c *ESClient) bulkRemoveRecordScroll(index string, hits Hits) (int, error) {
+func (c *ESClient) bulkRemoveRecordScroll(ctx context.Context, index string, hits Hits) (int, error) {
 	jsonLines := make([][]byte, len(hits.Hits)+1) // one for final 'new line'
 	stopIdx := 0
 	for _, item := range hits.Hits {
@@ -95,7 +96,7 @@ func (c *ESClient) bulkRemoveRecordScroll(index string, hits Hits) (int, error) 
 	}
 	jsonLines[stopIdx] = make([]byte, 0)
 	stopIdx++
-	_, err := c.DoBulkRequest("POST", "/_bulk", bytes.Join(jsonLines[:stopIdx], []byte("\n")))
+	_, err := c.DoBulkRequest(ctx, "POST", "/_bulk", bytes.Join(jsonLines[:stopIdx], []byte("\n")))
 	if err != nil {
 		return 0, err
 	}
@@ -104,6 +105,7 @@ func (c *ESClient) bulkRemoveRecordScroll(index string, hits Hits) (int, error) 
 
 // ManualBulkRecordRemove removes matching records
 func (c *ESClient) ManualBulkRecordRemove(
+	ctx context.Context,
 	index string,
 	appType string,
 	filters DocFilter,
@@ -113,7 +115,7 @@ func (c *ESClient) ManualBulkRecordRemove(
 ) (int, error) {
 	totalRemoved := 0
 	if !filters.Disabled {
-		items, err := c.SearchRecords(appType, filters, scrollTTL, srchChunkSize)
+		items, err := c.SearchRecords(ctx, appType, filters, scrollTTL, srchChunkSize)
 		if filters.WithProbability > 0 {
 			items.Hits = items.Hits.Sampled(filters.WithProbability)
 		}
@@ -130,7 +132,7 @@ func (c *ESClient) ManualBulkRecordRemove(
 				}
 				totalRemoved += len(items.Hits.Hits)
 			} else {
-				ans, bulkErr := c.bulkRemoveRecordScroll(index, items.Hits)
+				ans, bulkErr := c.bulkRemoveRecordScroll(ctx, index, items.Hits)
 				totalRemoved += ans
 				if bulkErr != nil {
 					return totalRemoved, bulkErr
@@ -139,7 +141,7 @@ func (c *ESClient) ManualBulkRecordRemove(
 		}
 		if items.ScrollID != "" {
 			for len(items.Hits.Hits) > 0 {
-				items, err = c.FetchScroll(items.ScrollID, scrollTTL)
+				items, err = c.FetchScroll(ctx, items.ScrollID, scrollTTL)
 				if filters.WithProbability > 0 {
 					items.Hits = items.Hits.Sampled(filters.WithProbability)
 				}
@@ -154,7 +156,7 @@ func (c *ESClient) ManualBulkRecordRemove(
 						}
 						totalRemoved += len(items.Hits.Hits)
 					} else {
-						ans, bulkErr := c.bulkRemoveRecordScroll(index, items.Hits)
+						ans, bulkErr := c.bulkRemoveRecordScroll(ctx, index, items.Hits)
 						totalRemoved += ans
 						if bulkErr != nil {
 							return totalRemoved, bulkErr

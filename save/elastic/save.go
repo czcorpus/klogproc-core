@@ -41,10 +41,10 @@ type ESImportFailHandler interface {
 
 // ----
 
-func BulkWriteRequest(data [][]byte, appType string, esconf *ConnectionConf) error {
+func BulkWriteRequest(ctx context.Context, data [][]byte, appType string, esconf *ConnectionConf) error {
 	esclient := NewClient(esconf, appType)
 	q := bytes.Join(data, []byte("\n"))
-	_, err := esclient.DoBulkRequest("POST", "/_bulk", q)
+	_, err := esclient.DoBulkRequest(ctx, "POST", "/_bulk", q)
 	if err != nil {
 		return fmt.Errorf("failed to push log chunk: %w", err)
 	}
@@ -58,10 +58,10 @@ func BulkWriteRequest(data [][]byte, appType string, esconf *ConnectionConf) err
 // stop. This allows for not dropping a whole chunk because of a single error
 // (or few errors). The action itself is not recoverable so in case it fails
 // from any reason, the items we wanted to write are definitely lost.
-func WriteBulkWithError(data [][]byte, appType string, esconf *ConnectionConf) {
+func WriteBulkWithError(ctx context.Context, data [][]byte, appType string, esconf *ConnectionConf) {
 	if len(data) <= 10 {
 		data = append(data, []byte("\n"))
-		if err := BulkWriteRequest(data, appType, esconf); err != nil {
+		if err := BulkWriteRequest(ctx, data, appType, esconf); err != nil {
 			log.Error().Err(err).Int("chunkSize", len(data)).Msg("failed to insert exploded chunk")
 
 		} else {
@@ -75,10 +75,10 @@ func WriteBulkWithError(data [][]byte, appType string, esconf *ConnectionConf) {
 		split := len(data) / 2
 		data1 := data[:split]
 		time.Sleep(2 * time.Second)
-		WriteBulkWithError(data1, appType, esconf)
+		WriteBulkWithError(ctx, data1, appType, esconf)
 		data2 := data[split:]
 		time.Sleep(2 * time.Second)
-		WriteBulkWithError(data2, appType, esconf)
+		WriteBulkWithError(ctx, data2, appType, esconf)
 	}
 }
 
@@ -98,74 +98,98 @@ func RunWriteConsumer(ctx context.Context, appType string, conf *ConnectionConf,
 			var chunkPosition *storage.LogRange
 			var esErr error
 			var rec *storage.BoundOutputRecord
-			for rec = range incomingData {
-				if chunkPosition == nil {
-					chunkPosition = &rec.FilePos
-				}
-				chunkPosition.SeekEnd = rec.FilePos.SeekEnd
-				jsonData, err := rec.ToJSON()
-				recType := es6DocType
-				index := fmt.Sprintf("%s_%s", conf.Index, appType)
-				if conf.MajorVersion < 6 {
-					recType = rec.GetType()
-					index = conf.Index
-				}
-				jsonMeta := CNKRecordMeta{
-					ID:    rec.GetID(),
-					Type:  recType,
-					Index: index,
-				}
-				jsonMetaES, err2 := (&ESCNKRecordMeta{Index: jsonMeta}).ToJSON()
 
-				if err != nil {
-					log.Error().Err(err).Msgf("Failed to encode item %s", rec.GetID())
-
-				} else if err2 != nil {
-					log.Error().Err(err2).Msgf("Failed to encode a 'meta' record for item %s", rec.GetID())
-
-				} else {
-					data[i] = jsonMetaES
-					data[i+1] = jsonData
-					i += 2
-				}
-				if i == conf.PushChunkSize*2 {
+			defer func() {
+				if i > 0 && ctx.Err() == nil {
 					data[i] = []byte("\n")
-					esErr = BulkWriteRequest(data[:i+1], appType, conf)
-					chunkPosition.Written = true
-					if esErr != nil {
-						dataCopy := make([][]byte, len(data[:i+1]))
-						go func() {
-							log.Warn().Err(esErr).Msg("due to inserting error, klogproc will try to insert smaller chunks")
-							copy(dataCopy, data[:i+1])
-							WriteBulkWithError(dataCopy, appType, conf)
-						}()
-					}
+					esErr = BulkWriteRequest(ctx, data[:i+1], appType, conf)
+					chunkPosition.Written = esErr == nil
 					confirmMsg := save.ConfirmMsg{
 						FilePath: rec.FilePath,
 						Position: *chunkPosition,
 						Error:    esErr,
 					}
 					confirmChan <- confirmMsg
+				}
+				close(confirmChan)
+			}()
+
+			for {
+				select {
+				case rec, ok := <-incomingData:
+					if !ok {
+						return
+					}
+					if chunkPosition == nil {
+						chunkPosition = &rec.FilePos
+					}
+					chunkPosition.SeekEnd = rec.FilePos.SeekEnd
+					jsonData, err := rec.ToJSON()
+					recType := es6DocType
+					index := fmt.Sprintf("%s_%s", conf.Index, appType)
+					if conf.MajorVersion < 6 {
+						recType = rec.GetType()
+						index = conf.Index
+					}
+					jsonMeta := CNKRecordMeta{
+						ID:    rec.GetID(),
+						Type:  recType,
+						Index: index,
+					}
+					jsonMetaES, err2 := (&ESCNKRecordMeta{Index: jsonMeta}).ToJSON()
+
+					if err != nil {
+						log.Error().Err(err).Msgf("Failed to encode item %s", rec.GetID())
+
+					} else if err2 != nil {
+						log.Error().Err(err2).Msgf("Failed to encode a 'meta' record for item %s", rec.GetID())
+
+					} else {
+						data[i] = jsonMetaES
+						data[i+1] = jsonData
+						i += 2
+					}
+					if i == conf.PushChunkSize*2 {
+						data[i] = []byte("\n")
+						esErr = BulkWriteRequest(ctx, data[:i+1], appType, conf)
+						chunkPosition.Written = true
+						if esErr != nil {
+							dataCopy := make([][]byte, len(data[:i+1]))
+							go func() {
+								log.Warn().Err(esErr).Msg("due to inserting error, klogproc will try to insert smaller chunks")
+								copy(dataCopy, data[:i+1])
+								WriteBulkWithError(ctx, dataCopy, appType, conf)
+							}()
+						}
+						confirmMsg := save.ConfirmMsg{
+							FilePath: rec.FilePath,
+							Position: *chunkPosition,
+							Error:    esErr,
+						}
+						confirmChan <- confirmMsg
+						i = 0
+					}
+
+				case <-ctx.Done():
 					i = 0
+					log.Info().Msg("closing log write consumer due to cancellation")
+					return
 				}
+
 			}
-			if i > 0 {
-				data[i] = []byte("\n")
-				esErr = BulkWriteRequest(data[:i+1], appType, conf)
-				chunkPosition.Written = esErr == nil
-				confirmMsg := save.ConfirmMsg{
-					FilePath: rec.FilePath,
-					Position: *chunkPosition,
-					Error:    esErr,
-				}
-				confirmChan <- confirmMsg
-			}
-			close(confirmChan)
 
 		} else {
-			for range incomingData {
+			for {
+				select {
+				case _, ok := <-incomingData:
+					if !ok {
+						return
+					}
+				case <-ctx.Done():
+					log.Info().Msg("closing log write consumer due to cancellation")
+					return
+				}
 			}
-			close(confirmChan)
 		}
 	}()
 	return confirmChan

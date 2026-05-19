@@ -26,36 +26,45 @@ import (
 )
 
 // RunWriteConsumer runs a dummy (null) write consumer
-// note: the context is currently unused
 func RunWriteConsumer(ctx context.Context, incomingData <-chan *storage.BoundOutputRecord, printOut bool) <-chan ConfirmMsg {
 	confirmChan := make(chan ConfirmMsg)
 	go func() {
 		var chunkPosition *storage.LogRange
-		for item := range incomingData {
-			var jsonError error
-			if chunkPosition == nil {
-				chunkPosition = &item.FilePos
-			}
-			chunkPosition.SeekEnd = item.FilePos.SeekEnd
-			out, jsonError := item.ToJSON()
-			if jsonError != nil {
-				log.Error().Err(jsonError).Send()
-
-			} else if printOut {
-				fmt.Printf("{\"id\": \"%s\"}\n", item.GetID())
-				fmt.Println(string(out))
-			}
-			chunkPosition.Written = true
-			confirmMsg := ConfirmMsg{
-				FilePath: item.FilePath,
-				Position: *chunkPosition,
-				Error:    jsonError,
-			}
-			confirmChan <- confirmMsg
-		}
 		defer func() {
 			close(confirmChan)
 		}()
+		for {
+			select {
+			case item, ok := <-incomingData:
+				if !ok {
+					return
+				}
+				var jsonError error
+				if chunkPosition == nil {
+					chunkPosition = &item.FilePos
+				}
+				chunkPosition.SeekEnd = item.FilePos.SeekEnd
+				out, jsonError := item.ToJSON()
+				if jsonError != nil {
+					log.Error().Err(jsonError).Send()
+
+				} else if printOut {
+					fmt.Printf("{\"id\": \"%s\"}\n", item.GetID())
+					fmt.Println(string(out))
+				}
+				chunkPosition.Written = true
+				confirmMsg := ConfirmMsg{
+					FilePath: item.FilePath,
+					Position: *chunkPosition,
+					Error:    jsonError,
+				}
+				confirmChan <- confirmMsg
+			case <-ctx.Done():
+				log.Info().Msg("closing log write consumer due to cancellation")
+				return
+
+			}
+		}
 	}()
 	return confirmChan
 }

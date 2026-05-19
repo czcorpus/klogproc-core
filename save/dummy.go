@@ -17,6 +17,7 @@
 package save
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/czcorpus/klogproc-core/storage"
@@ -25,7 +26,8 @@ import (
 )
 
 // RunWriteConsumer runs a dummy (null) write consumer
-func RunWriteConsumer(incomingData <-chan *storage.BoundOutputRecord, printOut bool) <-chan ConfirmMsg {
+// note: the context is currently unused
+func RunWriteConsumer(ctx context.Context, incomingData <-chan *storage.BoundOutputRecord, printOut bool) <-chan ConfirmMsg {
 	confirmChan := make(chan ConfirmMsg)
 	go func() {
 		var chunkPosition *storage.LogRange

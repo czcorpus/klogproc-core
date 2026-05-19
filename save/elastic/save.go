@@ -18,6 +18,7 @@ package elastic
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"time"
 
@@ -86,7 +87,7 @@ func WriteBulkWithError(data [][]byte, appType string, esconf *ConnectionConf) {
 // RunWriteConsumer reads incoming records from incomingData channel and writes them
 // chunk by chunk. Once the channel is closed, the rest of items in buffer is writtten
 // and the consumer finishes.
-func RunWriteConsumer(appType string, conf *ConnectionConf, incomingData <-chan *storage.BoundOutputRecord) <-chan save.ConfirmMsg {
+func RunWriteConsumer(ctx context.Context, appType string, conf *ConnectionConf, incomingData <-chan *storage.BoundOutputRecord) <-chan save.ConfirmMsg {
 	// Elasticsearch bulk writes
 	confirmChan := make(chan save.ConfirmMsg)
 	go func() {

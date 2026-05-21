@@ -88,7 +88,6 @@ func ValidateAPIReportingKey(appID, secret, key string, dt time.Time, refreshInt
 	}
 	for _, dtCandidate := range getDTCandidates(dt) {
 		expected := generateAPIReportingKey(appID, secret, dtCandidate, durationStringToDTPrefix(refreshInterval))
-		fmt.Println("testing candidate ", dtCandidate.Format(time.RFC3339), ", key: ", expected, ", incom: ", key)
 		if hmac.Equal([]byte(key), []byte(expected)) {
 			return true, nil
 		}

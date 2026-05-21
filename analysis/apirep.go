@@ -41,12 +41,12 @@ func validateRefreshInterval(refresh string) error {
 	return fmt.Errorf("invalid API key refresh interval: %s, use 1d, 10h, 1h, 10m, 1m", refresh)
 }
 
-func getDTCandidates(dt time.Time, refreshInterval string) []time.Time {
-	delta := 5 * time.Minute
-	if refreshInterval == APIReportingKeyTTLOneMinute {
-		delta = time.Second * 30
+func getDTCandidates(dt time.Time) []time.Time {
+	times := make([]time.Time, 7)
+	for i := -3; i <= 3; i++ {
+		times[i+3] = dt.Add(time.Duration(i) * time.Minute)
 	}
-	return []time.Time{dt.Add(-delta), dt, dt.Add(delta)}
+	return times
 }
 
 func durationStringToDTPrefix(ds string) int {
@@ -86,8 +86,9 @@ func ValidateAPIReportingKey(appID, secret, key string, dt time.Time, refreshInt
 	if err := validateRefreshInterval(refreshInterval); err != nil {
 		return false, fmt.Errorf("cannot validate api reporting key: %w", err)
 	}
-	for _, dtCandidate := range getDTCandidates(dt, refreshInterval) {
+	for _, dtCandidate := range getDTCandidates(dt) {
 		expected := generateAPIReportingKey(appID, secret, dtCandidate, durationStringToDTPrefix(refreshInterval))
+		fmt.Println("testing candidate ", dtCandidate.Format(time.RFC3339), ", key: ", expected, ", incom: ", key)
 		if hmac.Equal([]byte(key), []byte(expected)) {
 			return true, nil
 		}

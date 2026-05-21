@@ -51,32 +51,30 @@ func TestValidateAPIReportingKeyExactTime(t *testing.T) {
 }
 
 // TestValidateAPIReportingKeyWithinWindow checks that validation succeeds within
-// the tolerance window, which is interval-dependent:
-//   - 1m TTL:  ±1 minute  (tight — a 5m window would negate the 1m rotation)
-//   - others:  ±5 minutes
+// the ±3-minute tolerance window for all intervals.
 func TestValidateAPIReportingKeyWithinWindow(t *testing.T) {
 	base := time.Date(2026, 5, 20, 14, 25, 0, 0, time.UTC)
 
 	t.Run("1m_validated_1m_after_generation", func(t *testing.T) {
-		// candidate dt-1m = 14:25 matches the key generated at 14:25
+		// candidate dt-1m = 14:25 directly matches the key generated at 14:25
 		key := makeTestKey(testAppID, testSecret, base, APIReportingKeyTTLOneMinute)
 		ok, err := ValidateAPIReportingKey(testAppID, testSecret, key, base.Add(time.Minute), APIReportingKeyTTLOneMinute)
 		assert.NoError(t, err)
 		assert.True(t, ok)
 	})
 
-	t.Run("1m_validated_1m_before_generation", func(t *testing.T) {
-		// candidate dt+1m = 14:25 matches the key generated at 14:25
+	t.Run("1m_validated_3m_after_generation", func(t *testing.T) {
+		// candidate dt-3m = 14:25 is at the edge of the window, still matches
 		key := makeTestKey(testAppID, testSecret, base, APIReportingKeyTTLOneMinute)
-		ok, err := ValidateAPIReportingKey(testAppID, testSecret, key, base.Add(-time.Second*30), APIReportingKeyTTLOneMinute)
+		ok, err := ValidateAPIReportingKey(testAppID, testSecret, key, base.Add(3*time.Minute), APIReportingKeyTTLOneMinute)
 		assert.NoError(t, err)
 		assert.True(t, ok)
 	})
 
-	t.Run("10m_validated_5m_after_generation", func(t *testing.T) {
-		// candidate dt-5m = 14:25 shares the 10-minute prefix "14:2" with 14:25
+	t.Run("10m_validated_3m_after_generation", func(t *testing.T) {
+		// candidate dt-3m = 14:25 shares the 10-minute prefix "14:2" with 14:25
 		key := makeTestKey(testAppID, testSecret, base, APIReportingKeyTTLTenMinutes)
-		ok, err := ValidateAPIReportingKey(testAppID, testSecret, key, base.Add(5*time.Minute), APIReportingKeyTTLTenMinutes)
+		ok, err := ValidateAPIReportingKey(testAppID, testSecret, key, base.Add(3*time.Minute), APIReportingKeyTTLTenMinutes)
 		assert.NoError(t, err)
 		assert.True(t, ok)
 	})
@@ -87,22 +85,22 @@ func TestValidateAPIReportingKeyWithinWindow(t *testing.T) {
 func TestValidateAPIReportingKeyOutsideWindow(t *testing.T) {
 	base := time.Date(2026, 5, 20, 14, 25, 0, 0, time.UTC)
 
-	t.Run("1m_validated_2m_after_generation", func(t *testing.T) {
+	t.Run("1m_validated_4m_after_generation", func(t *testing.T) {
 		key := makeTestKey(testAppID, testSecret, base, APIReportingKeyTTLOneMinute)
-		ok, err := ValidateAPIReportingKey(testAppID, testSecret, key, base.Add(2*time.Minute), APIReportingKeyTTLOneMinute)
+		ok, err := ValidateAPIReportingKey(testAppID, testSecret, key, base.Add(4*time.Minute), APIReportingKeyTTLOneMinute)
 		assert.NoError(t, err)
 		assert.False(t, ok)
 	})
 
-	t.Run("1m_validated_2m_before_generation", func(t *testing.T) {
+	t.Run("1m_validated_4m_before_generation", func(t *testing.T) {
 		key := makeTestKey(testAppID, testSecret, base, APIReportingKeyTTLOneMinute)
-		ok, err := ValidateAPIReportingKey(testAppID, testSecret, key, base.Add(-2*time.Minute), APIReportingKeyTTLOneMinute)
+		ok, err := ValidateAPIReportingKey(testAppID, testSecret, key, base.Add(-4*time.Minute), APIReportingKeyTTLOneMinute)
 		assert.NoError(t, err)
 		assert.False(t, ok)
 	})
 
 	t.Run("10m_validated_10m_after_generation", func(t *testing.T) {
-		// At 14:35 all three candidates (14:30, 14:35, 14:40) have prefix "14:3",
+		// At 14:35 all 7 candidates (14:32..14:38) have prefix "14:3",
 		// so the key generated at 14:25 (prefix "14:2") is no longer accepted.
 		key := makeTestKey(testAppID, testSecret, base, APIReportingKeyTTLTenMinutes)
 		ok, err := ValidateAPIReportingKey(testAppID, testSecret, key, base.Add(10*time.Minute), APIReportingKeyTTLTenMinutes)
@@ -171,26 +169,27 @@ func TestValidateAPIReportingKeyInvalidInterval(t *testing.T) {
 // generated near the end of a day (23:59) and validated shortly after midnight
 // (00:02) — a 3-minute gap that crosses a day boundary.
 //
-// The validation produces three candidate times from the validation moment:
-// 23:57 (day D), 00:02 (day D+1), 00:07 (day D+1).
+// All intervals use the same ±3-minute window at 1-minute resolution.
+// Candidates from valTime 00:02: 23:59, 00:00, 00:01, 00:02, 00:03, 00:04, 00:05.
 //
-// Whether the key is accepted depends on whether the TTL prefix is coarse enough
-// that the 23:57 candidate shares the same prefix as the 23:59 generation time:
+// Whether the key is accepted depends on whether any candidate shares the same
+// prefix as the 23:59 generation time:
 //
-//   - 1m  (prefix "HH:MM"):  23:57 ≠ 23:59  →  fails
-//   - 10m (prefix "HH:M"):   23:57 = 23:5x  →  passes
-//   - 1h  (prefix "HH"):     23:57 = 23     →  passes
-//   - 10h (prefix "H-tens"): 23:57 = 2x     →  passes
-//   - 1d  (prefix "date"):   23:57 = same day → passes
+//   - 1m  (prefix "HH:MM"):  23:59 shares "23:59"            →  passes
+//   - 10m (prefix "HH:M"):   23:59 shares "23:5"             →  passes
+//   - 1h  (prefix "HH"):     23:59 shares "23"               →  passes
+//   - 10h (prefix "H-tens"): 23:59 shares "2"                →  passes
+//   - 1d  (prefix "date"):   23:59 is same day               →  passes
 func TestValidateAPIReportingKeyMidnightCrossing(t *testing.T) {
 	genTime := time.Date(2026, 1, 2, 23, 59, 0, 0, time.UTC)
 	valTime := time.Date(2026, 1, 3, 0, 2, 0, 0, time.UTC)
 
-	t.Run("1m_fails", func(t *testing.T) {
+	t.Run("1m_passes", func(t *testing.T) {
+		// candidate valTime-3m = 23:59 shares prefix "23:59" with the key
 		key := makeTestKey(testAppID, testSecret, genTime, APIReportingKeyTTLOneMinute)
 		ok, err := ValidateAPIReportingKey(testAppID, testSecret, key, valTime, APIReportingKeyTTLOneMinute)
 		assert.NoError(t, err)
-		assert.False(t, ok)
+		assert.True(t, ok)
 	})
 
 	t.Run("10m_passes", func(t *testing.T) {

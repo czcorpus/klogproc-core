@@ -82,6 +82,150 @@ func WriteBulkWithError(ctx context.Context, data [][]byte, appType string, esco
 	}
 }
 
+// -------
+
+type appBulkChunk struct {
+	data      [][]byte
+	chunkSize int
+	idx       int
+}
+
+func (chunk *appBulkChunk) String() string {
+	return fmt.Sprintf("appBulkChunk{chunkSize: %d, idx: %d}", chunk.chunkSize, chunk.idx)
+}
+
+func (chunk *appBulkChunk) isFull() bool {
+	return chunk.idx == chunk.chunkSize*2
+}
+
+func (chunk *appBulkChunk) prepareForSending() [][]byte {
+	chunk.data[chunk.idx] = []byte("\n")
+	return chunk.data[:chunk.idx+1]
+}
+
+func (chunk *appBulkChunk) reset() {
+	chunk.idx = 0
+}
+
+func (chunk *appBulkChunk) isUnfinished() bool {
+	return chunk.idx > 0
+}
+
+func (chunk *appBulkChunk) addData(metadata, data []byte) {
+	chunk.data[chunk.idx] = metadata
+	chunk.data[chunk.idx+1] = data
+	chunk.idx += 2
+}
+
+// -------
+
+// RunOnTheFlyWriteConsumer starts a log record data consumer (and writer) for logs not coming from files
+// but rather directly by sending them from other part of an application.
+//
+// Unlike the RunWriteConsumer, this function works for any "app type", i.e. it is not necessary to call
+// this (and thus create a new consumer goroutine) for each logged service. The function keeps chunks for
+// multiple logged services at once.
+func RunOnTheFlyWriteConsumer(ctx context.Context, conf *ConnectionConf, incomingData <-chan *storage.OnTheFlyOutputRecord) <-chan error {
+	chunks := make(map[string]*appBulkChunk)
+	errChan := make(chan error, 1)
+	go func() {
+		defer func() {
+			if ctx.Err() != nil {
+				var dropped int
+				for _, chunk := range chunks {
+					dropped += chunk.idx / 2
+				}
+				if dropped > 0 {
+					log.Warn().Int("droppedRecords", dropped).Msg("closing log write consumer due to cancellation, some buffered records were not flushed")
+				}
+				close(errChan)
+				return
+			}
+			for appType, chunk := range chunks {
+				if chunk.isUnfinished() {
+					dataToSend := chunk.prepareForSending()
+					if err := BulkWriteRequest(ctx, dataToSend, appType, conf); err != nil {
+						select {
+						case errChan <- err:
+						default:
+							log.Error().Err(err).Msg("errChan full during shutdown flush, dropping error")
+						}
+					}
+					chunk.reset()
+				}
+			}
+			close(errChan)
+		}()
+		for {
+			select {
+			case rec, ok := <-incomingData:
+				if !ok {
+					return
+				}
+
+				pushChunkSize := conf.GetPushChunkSize(rec.AppType)
+
+				if chunks[rec.AppType] == nil {
+					chunks[rec.AppType] = &appBulkChunk{
+						chunkSize: pushChunkSize,
+						data:      make([][]byte, pushChunkSize*2+1),
+					}
+				}
+				chunk := chunks[rec.AppType]
+
+				jsonData, err := rec.ToJSON()
+				recType := es6DocType
+				index := fmt.Sprintf("%s_%s", conf.Index, rec.AppType)
+				if conf.MajorVersion < 6 {
+					recType = rec.GetType()
+					index = conf.Index
+				}
+				jsonMeta := CNKRecordMeta{
+					ID:    rec.GetID(),
+					Type:  recType,
+					Index: index,
+				}
+				jsonMetaES, err2 := (&ESCNKRecordMeta{Index: jsonMeta}).ToJSON()
+
+				if err != nil {
+					log.Error().Err(err).Msgf("Failed to encode item %s", rec.GetID())
+					select {
+					case errChan <- err:
+					case <-ctx.Done():
+						return
+					}
+				} else if err2 != nil {
+					log.Error().Err(err2).Msgf("Failed to encode a 'meta' record for item %s", rec.GetID())
+					select {
+					case errChan <- err2:
+					case <-ctx.Done():
+						return
+					}
+				} else {
+					chunk.addData(jsonMetaES, jsonData)
+					if chunk.isFull() {
+						dataToSend := chunk.prepareForSending()
+						if err := BulkWriteRequest(ctx, dataToSend, rec.AppType, conf); err != nil {
+							select {
+							case errChan <- err:
+							case <-ctx.Done():
+								return
+							}
+						}
+						chunk.reset()
+					}
+				}
+
+			case <-ctx.Done():
+				log.Info().Msg("closing log write consumer due to cancellation")
+				return
+			}
+		}
+	}()
+
+	return errChan
+}
+
 // ----
 
 // RunWriteConsumer reads incoming records from incomingData channel and writes them

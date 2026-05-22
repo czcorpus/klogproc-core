@@ -296,6 +296,8 @@ func (p LogRange) String() string {
 		p.Inode, p.SeekStart, p.SeekEnd, p.Written)
 }
 
+// BoundOutputRecord is a wrapper for archived log record
+// bound to a specific source log file
 type BoundOutputRecord struct {
 	Rec      OutputRecord
 	FilePos  LogRange
@@ -315,6 +317,33 @@ func (r *BoundOutputRecord) GetID() string {
 }
 
 func (r *BoundOutputRecord) GetType() string {
+	return r.Rec.GetType()
+}
+
+// ------------------------
+
+// OnTheFlyOutputRecord is a wrapper for archived log record
+// which is delivered dynamically from within an application
+// (i.e. application generates the record directly based
+// on its activity and stores it to Elastic)
+type OnTheFlyOutputRecord struct {
+	Rec     OutputRecord
+	AppType string
+}
+
+func (r *OnTheFlyOutputRecord) ToJSON() ([]byte, error) {
+	return r.Rec.ToJSON()
+}
+
+func (r *OnTheFlyOutputRecord) GetTime() time.Time {
+	return r.Rec.GetTime()
+}
+
+func (r *OnTheFlyOutputRecord) GetID() string {
+	return r.Rec.GetID()
+}
+
+func (r *OnTheFlyOutputRecord) GetType() string {
 	return r.Rec.GetType()
 }
 

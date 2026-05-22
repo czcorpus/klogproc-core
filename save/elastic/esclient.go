@@ -48,19 +48,30 @@ type SnapshotConf struct {
 // ConnectionConf defines a configuration
 // required to work with ES client.
 type ConnectionConf struct {
-	Server         string       `json:"server"`
-	Index          string       `json:"index"`
-	PushChunkSize  int          `json:"pushChunkSize"`
-	ScrollTTL      string       `json:"scrollTtl"`
-	ReqTimeoutSecs int          `json:"reqTimeoutSecs"`
-	MajorVersion   int          `json:"majorVersion"`
-	Snapshots      SnapshotConf `json:"snapshot"`
+	Server                  string         `json:"server"`
+	Index                   string         `json:"index"`
+	PushChunkSize           int            `json:"pushChunkSize"`
+	PerServicePushChunkSize map[string]int `json:"perServicePushChunkSize"`
+	ScrollTTL               string         `json:"scrollTtl"`
+	ReqTimeoutSecs          int            `json:"reqTimeoutSecs"`
+	MajorVersion            int            `json:"majorVersion"`
+	Snapshots               SnapshotConf   `json:"snapshot"`
 }
 
 // IsConfigured tests whether the configuration is considered
 // to be enabled (i.e. no error checking just enabled/disabled)
 func (conf *ConnectionConf) IsConfigured() bool {
 	return conf.Server != ""
+}
+
+// GetPushChunkSize returns a service individually configured ES bulk data size
+// or the global one if nothing is specially set for the service.
+func (conf *ConnectionConf) GetPushChunkSize(service string) int {
+	v, ok := conf.PerServicePushChunkSize[service]
+	if ok {
+		return v
+	}
+	return conf.PushChunkSize
 }
 
 // Validate tests whether the configuration is filled in

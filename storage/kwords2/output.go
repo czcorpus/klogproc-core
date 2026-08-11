@@ -50,11 +50,12 @@ type OutputRecord struct {
 	Action        string                `json:"action,omitempty"`
 	IsQuery       bool                  `json:"isQuery"`
 	IsAPI         bool                  `json:"isApi"`
+	ClientFlag    string                `json:"clientFlag"`
 	Corpus        string                `json:"corpus"`
 	TextCharCount int                   `json:"textCharCount,omitempty"`
 	TextWordCount int                   `json:"textWordCount,omitempty"`
 	TextLang      string                `json:"textLang,omitempty"`
-	GeoIP         storage.GeoDataRecord `json:"geoip,omitempty"`
+	GeoIP         storage.GeoDataRecord `json:"geoip,omitzero"`
 	Args          *Args                 `json:"args,omitempty"`
 	UserAgent     string                `json:"userAgent"`
 	Error         *storage.ErrorRecord  `json:"error,omitempty"`
@@ -245,6 +246,11 @@ func (r *OutputRecord) LSetProperty(name string, value lua.LValue) error {
 	case "Version":
 		if tValue, ok := value.(lua.LString); ok {
 			r.Version = string(tValue)
+			return nil
+		}
+	case "ClientFlag":
+		if tValue, ok := value.(lua.LString); ok {
+			r.ClientFlag = string(tValue)
 			return nil
 		}
 	}
